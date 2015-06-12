@@ -29,10 +29,11 @@ def on_message(client, userdata, msg):
     doCommand = None
 
     if msg.topic == "/led_strip/reset":
-        logging.info("received reset command")
+        logging.warn("received reset command")
         doCommand = "RESET\n"
     elif msg.topic == "/led_strip/RGB":
         logging.info("setting RGB to " + str(msg.payload))
+        logging.warn("setting RGB at the same time is not currently supported")
     elif msg.topic == "/led_strip/R":
         cV = int(float(str(msg.payload)) * 2.55)
         logging.info("setting R to " + str(cV))
@@ -47,7 +48,8 @@ def on_message(client, userdata, msg):
         doCommand = "BLUE " + str(cV) + "\n"
     elif msg.topic == "/led_strip/state":
         logging.info("setting state to " + str(msg.payload))
-        doCommand = str(msg.payload) + "\n"
+        if str(msg.payload) == "RUN" or str(msg.payload) == "STOP":
+            doCommand = str(msg.payload) + "\n"
     else:
         logging.info("unexpected command: "+msg.topic+" := "+str(msg.payload))
 
