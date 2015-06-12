@@ -6,42 +6,70 @@ import paho.mqtt.client as mqtt
 import time
 import datetime
 
+import logging
+
+
+logging.basicConfig(filename='led_strip_mqtt.log', level=logging.INFO)
+
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
-    print("Connected with result code "+str(rc))
+    logging.debug("Connected with result code "+str(rc))
     #client.subscribe("/led_strip/#")
     client.subscribe("/led_strip/reset")
     client.subscribe("/led_strip/RGB")
     client.subscribe("/led_strip/R")
     client.subscribe("/led_strip/G")
     client.subscribe("/led_strip/B")
-    client.subscribe("/led_strip/RUN")
+    client.subscribe("/led_strip/state")
 
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
+    doCommand = None
+
     if msg.topic == "/led_strip/reset":
-        print("received reset command")
+        logging.info("received reset command")
+        doCommand = "RESET\n"
     elif msg.topic == "/led_strip/RGB":
-        print("setting RGB to " + str(msg.payload))
+        logging.info("setting RGB to " + str(msg.payload))
     elif msg.topic == "/led_strip/R":
-        print("setting R to " + str(msg.payload))
+        cV = int(float(str(msg.payload)) * 2.55)
+        logging.info("setting R to " + str(cV))
+        doCommand = "RED " + str(cV) + "\n"
     elif msg.topic == "/led_strip/G":
-        print("setting G to " + str(msg.payload))
+        cV = int(float(str(msg.payload)) * 2.55)
+        logging.info("setting G to " + str(cV))
+        doCommand = "GREEN " + str(cV) + "\n"
     elif msg.topic == "/led_strip/B":
-        print("setting B to " + str(msg.payload))
-    elif msg.topic == "/led_strip/RUN":
-        print("setting RUN state to " + str(msg.payload))
+        cV = int(float(str(msg.payload)) * 2.55)
+        logging.info("setting B to " + str(cV))
+        doCommand = "BLUE " + str(cV) + "\n"
+    elif msg.topic == "/led_strip/state":
+        logging.info("setting state to " + str(msg.payload))
+        doCommand = str(msg.payload) + "\n"
     else:
-        print("unexpected command: "+msg.topic+" := "+str(msg.payload))
+        logging.info("unexpected command: "+msg.topic+" := "+str(msg.payload))
+
+    if doCommand is None:
+        return
+    logging.info("doCommand: " + doCommand)
+
+    sock = socketConnect()
+
+    try:
+        socketCommand(sock, doCommand)
+
+    finally:
+        socketDisconnect(sock)
+
 
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
 
 client.connect("mqtt.lan", 1883, 60)
-client.publish("/node", '{ "node": "led_strip", "features": [ "reset", "LHZ", "RGB", "R", "G", "B", "RUN" ] }');
+client.publish("/node", '{ "node": "led_strip", "features": [ "reset", "LHZ", "RGB", "R", "G", "B", "state" ] }');
 # run the mqtt client in background thread
 client.loop_start()
 
@@ -50,7 +78,7 @@ def readlines(sock, recv_buffer=4096, delim='\n'):
     buffer = ''
     data = True
     while data:
-        #print "readlines while data"
+        #logging.info "readlines while data"
         data = sock.recv(recv_buffer)
         buffer += data
 
@@ -59,44 +87,57 @@ def readlines(sock, recv_buffer=4096, delim='\n'):
             yield line
     return
 
-# loop and query then update
-i = 0
-while True:
-    print i
-    i = i + 1
-    print datetime.datetime.now()
 
+def socketConnect():
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Connect the socket to the port where the server is listening
     server_address = ('led_strip.lan', 23)
-    print >>sys.stderr, 'connecting to %s port %s' % server_address
+    logging.debug('connecting to %s port %s' % server_address)
     sock.connect(server_address)
+    return sock
 
-    try:
+
+def socketDisconnect(sock):
+    logging.debug('closing socket')
+    sock.close()
+
+def socketCommand(sock, command):
         # Send data
-        message = 'LHZ\n'
-        print >>sys.stderr, 'sending "%s"' % message
-        sock.sendall(message)
-        print "sent"
+        logging.debug('sending "%s"' % command)
+        sock.sendall(command)
+        logging.debug("sent")
 
         for line in readlines(sock):
-            print line
+            logging.info(line)
             # do something
             resp = line.split()[0]
             if (resp == "OK"):
-                print line
+                logging.debug(line)
                 break
             elif (resp == "ERROR"):
-                print line
+                logging.debug(line)
                 break
             elif (resp == "light" and line.split()[1] == "frequency:"):
                 client.publish("/led_strip/LHZ", line.split()[2]);
-                print "published"
+                logging.debug("published")
                 break
 
+
+# loop and query then update
+i = 0
+while True:
+    logging.debug(i)
+    i = i + 1
+    logging.debug(datetime.datetime.now())
+
+    sock = socketConnect()
+
+    try:
+        command = 'LHZ\n'
+        socketCommand(sock, command)
+
     finally:
-        print >>sys.stderr, 'closing socket'
-        sock.close()
+        socketDisconnect(sock)
 
     time.sleep(50)
