@@ -9,7 +9,7 @@ import datetime
 import logging
 
 
-logging.basicConfig(filename='led_strip_mqtt.log', level=logging.INFO)
+logging.basicConfig(filename='led_strip_mqtt.log', level=logging.WARN)
 
 
 # The callback for when the client receives a CONNACK response from the server.
